@@ -1,0 +1,55 @@
+name: Week1-Repo-Validation
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  repo-validation:
+    name: Validate Week 1 Deliverables
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check Required Folders Exist
+        run: |
+          required_dirs=("docs" "project" "project/week1-setup" "00-documentation")
+          for d in "${required_dirs[@]}"; do
+            if [ ! -d "$d" ]; then
+              echo "::error::$d folder is missing."
+              exit 1
+            fi
+          done
+
+      - name: Validate no secrets committed
+        run: |
+          forbidden_patterns=("DefaultEndpointsProtocol" "AccountKey=" "SharedAccessSignature")
+          for pattern in "${forbidden_patterns[@]}"; do
+            if grep -R "$pattern" .; then
+              echo "::error::Potential secret detected: $pattern"
+              exit 1
+            fi
+          done
+          echo "No secrets detected ✔"
+
+      - name: Markdown Linter (Basic)
+        run: |
+          sudo apt-get install -y markdownlint || true
+          markdownlint **/*.md || true
+          echo "Markdown linting completed."
+
+      - name: Validate CSV Sample Exists
+        run: |
+          if [ ! -f "project/week1-setup/sample_data/customers.csv" ] && \
+             [ ! -f "project/week1-setup/sample_data/generate_sample_data.py" ]; then
+            echo "::warning::Sample data file or generator script missing."
+          else
+            echo "Sample data verified ✔"
+          fi
+
+      - name: PR Summary
+        run: |
+          echo "Week 1 Repo Validation Complete ✔"

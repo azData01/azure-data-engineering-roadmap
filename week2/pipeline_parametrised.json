@@ -1,0 +1,109 @@
+{
+    "name": "pl_ingest_customers",
+    "properties": {
+        "activities": [
+            {
+                "name": "Copy data1",
+                "type": "Copy",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "DelimitedTextSource",
+                        "storeSettings": {
+                            "type": "AzureBlobFSReadSettings",
+                            "recursive": true,
+                            "enablePartitionDiscovery": false
+                        },
+                        "formatSettings": {
+                            "type": "DelimitedTextReadSettings"
+                        }
+                    },
+                    "sink": {
+                        "type": "DelimitedTextSink",
+                        "storeSettings": {
+                            "type": "AzureBlobFSWriteSettings",
+                            "copyBehavior": "FlattenHierarchy"
+                        },
+                        "formatSettings": {
+                            "type": "DelimitedTextWriteSettings",
+                            "quoteAllText": true,
+                            "fileExtension": ".txt"
+                        }
+                    },
+                    "enableStaging": false,
+                    "translator": {
+                        "type": "TabularTranslator",
+                        "typeConversion": true,
+                        "typeConversionSettings": {
+                            "allowDataTruncation": true,
+                            "treatBooleanAsNumber": false
+                        }
+                    }
+                },
+                "inputs": [
+                    {
+                        "referenceName": "DelimitedText2",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "p_source_folder": {
+                                "value": "@pipeline().parameters.p_source_folder",
+                                "type": "Expression"
+                            },
+                            "p_file_name": {
+                                "value": "@pipeline().parameters.p_file_name",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                ],
+                "outputs": [
+                    {
+                        "referenceName": "DelimitedText1",
+                        "type": "DatasetReference",
+                        "parameters": {
+                            "p_source_folder": {
+                                "value": "@pipeline().parameters.p_source_folder",
+                                "type": "Expression"
+                            },
+                            "p_sink_folder": {
+                                "value": "@pipeline().parameters.p_sink_folder",
+                                "type": "Expression"
+                            },
+                            "p_file_name": {
+                                "value": "@pipeline().parameters.p_file_name",
+                                "type": "Expression"
+                            }
+                        }
+                    }
+                ]
+            }
+        ],
+        "parameters": {
+            "p_file_name": {
+                "type": "string",
+                "defaultValue": "customers.csv"
+            },
+            "p_source_folder": {
+            },
+            "p_sink_folder": {
+                "type": "string",
+                "defaultValue": "raw/customers"
+            }
+        },
+
+        "annotations": [],
+
+        "lastPublishTime": "2025-12-12T15:49:36Z"
+    },
+
+    "type": "Microsoft.DataFactory/factories/pipelines"
+
+}

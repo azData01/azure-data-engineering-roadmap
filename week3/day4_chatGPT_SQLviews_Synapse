@@ -1,0 +1,286 @@
+WEEK 3 — DAY 4: Serving Views (BI-ready layer)
+Today’s goal
+
+Create a “serving layer” in Synapse Serverless that:
+
+hides raw file paths
+
+standardizes types
+
+presents clean business-friendly columns
+
+provides stable objects for BI tools (Power BI / Fabric / analysts)
+
+You will deliver:
+
+vw_customers (clean dimension-style view)
+
+(optional) vw_customer_signups_by_month (aggregation view)
+
+(optional) vw_customer_latest_snapshot (if you later add incremental loads)
+
+Step 0 — Confirm you’re in the right database
+
+In Synapse Studio SQL script:
+
+USE customer360_analytics;
+GO
+
+
+Also confirm your Parquet external table points to the correct location. Example:
+
+-- Optional: check what tables exist
+SELECT name FROM sys.external_tables;
+GO
+
+
+If your CETAS table is named dbo.ext_customers_parquet and wrote to /clean/customers_v1/, you’re good.
+
+Step 1 — Create a “reader” external table on the CETAS folder (Best practice)
+
+Why: CETAS creates a table + writes files. For a clean architecture, create a separate reader external table that simply reads that folder.
+
+1.1 Create a dedicated reader table (adjust LOCATION to your real folder)
+DROP EXTERNAL TABLE IF EXISTS dbo.ext_customers_clean;
+GO
+
+CREATE EXTERNAL TABLE dbo.ext_customers_clean
+(
+    customer_id INT,
+    name VARCHAR(100),
+    signup_date DATE
+)
+WITH (
+    LOCATION = '/clean/customers_v1/',   -- IMPORTANT: use the CETAS-created folder
+    DATA_SOURCE = eds_datalake,
+    FILE_FORMAT = eff_parquet
+);
+GO
+
+1.2 Validate
+SELECT TOP 10 * 
+FROM dbo.ext_customers_clean
+ORDER BY customer_id;
+GO
+
+
+✅ If this works, you’re ready to build views.
+
+Step 2 — Create the BI-ready “Dimension” View: vw_customers
+
+BI-ready means:
+
+stable column names
+
+consistent types
+
+no storage paths
+
+added derived attributes useful in BI (year/month)
+
+minimal business logic (heavy transforms come later in Spark/dbt)
+
+CREATE OR ALTER VIEW dbo.vw_customers
+AS
+SELECT
+    customer_id,
+    name,
+    signup_date,
+    CAST(signup_date AS DATE) AS signup_date_clean,
+    DATEFROMPARTS(YEAR(signup_date), MONTH(signup_date), 1) AS signup_month_start,
+    YEAR(signup_date) AS signup_year,
+    MONTH(signup_date) AS signup_month
+FROM dbo.ext_customers_clean;
+GO
+
+
+Validate:
+
+SELECT TOP 20 *
+FROM dbo.vw_customers
+ORDER BY customer_id;
+GO
+
+Step 3 — Create an Aggregation View for BI: vw_customer_signups_by_month
+
+This is a classic BI pattern: pre-aggregated views for dashboards.
+
+CREATE OR ALTER VIEW dbo.vw_customer_signups_by_month
+AS
+SELECT
+    signup_month_start,
+    COUNT(*) AS customers_signed_up
+FROM dbo.vw_customers
+GROUP BY signup_month_start;
+GO
+
+
+Validate:
+
+SELECT *
+FROM dbo.vw_customer_signups_by_month
+ORDER BY signup_month_start;
+GO
+
+Step 4 — Create a “Serving Schema” (Optional but professional)
+
+This makes your SQL objects clean and easy for BI users.
+
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'serving')
+BEGIN
+    EXEC('CREATE SCHEMA serving');
+END
+GO
+
+
+Now create views under serving schema:
+
+CREATE OR ALTER VIEW serving.vw_customers
+AS
+SELECT * FROM dbo.vw_customers;
+GO
+
+CREATE OR ALTER VIEW serving.vw_customer_signups_by_month
+AS
+SELECT * FROM dbo.vw_customer_signups_by_month;
+GO
+
+
+This lets BI teams connect to a single schema (serving) and ignore everything else.
+
+Step 5 — BI-ready layer explanation (what you’ll write in your docs)
+
+Use this concept in your repo:
+
+What makes it BI-ready?
+
+A BI-ready layer is:
+
+semantic-friendly (columns named like business terms)
+
+stable (views don’t change every day)
+
+secure (later you can apply access via schema / view permissions)
+
+consumption-first (Power BI can query views immediately)
+
+Why views instead of tables?
+
+external tables map to folders/files (storage concern)
+
+views encapsulate business logic and prevent BI users from touching raw locations
+
+views allow you to evolve the underlying storage without breaking reports
+
+GitHub deliverables & commits (Day 4)
+Folder structure (add these files)
+src/analytics/synapse/views/
+  01_create_serving_schema.sql
+  02_vw_customers.sql
+  03_vw_customer_signups_by_month.sql
+
+project/week3-synapse/day4-serving-views.md
+project/week3-synapse/screenshots/
+  day4_vw_customers.png
+  day4_vw_customer_signups.png
+
+Exact SQL files (copy/paste)
+01_create_serving_schema.sql
+USE customer360_analytics;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'serving')
+BEGIN
+    EXEC('CREATE SCHEMA serving');
+END
+GO
+
+02_vw_customers.sql
+USE customer360_analytics;
+GO
+
+CREATE OR ALTER VIEW dbo.vw_customers
+AS
+SELECT
+    customer_id,
+    name,
+    signup_date,
+    CAST(signup_date AS DATE) AS signup_date_clean,
+    DATEFROMPARTS(YEAR(signup_date), MONTH(signup_date), 1) AS signup_month_start,
+    YEAR(signup_date) AS signup_year,
+    MONTH(signup_date) AS signup_month
+FROM dbo.ext_customers_clean;
+GO
+
+CREATE OR ALTER VIEW serving.vw_customers
+AS
+SELECT * FROM dbo.vw_customers;
+GO
+
+03_vw_customer_signups_by_month.sql
+USE customer360_analytics;
+GO
+
+CREATE OR ALTER VIEW dbo.vw_customer_signups_by_month
+AS
+SELECT
+    signup_month_start,
+    COUNT(*) AS customers_signed_up
+FROM dbo.vw_customers
+GROUP BY signup_month_start;
+GO
+
+CREATE OR ALTER VIEW serving.vw_customer_signups_by_month
+AS
+SELECT * FROM dbo.vw_customer_signups_by_month;
+GO
+
+Documentation file (Day 4)
+project/week3-synapse/day4-serving-views.md (outline)
+
+Include:
+
+what objects you created
+
+why serving schema exists
+
+which view Power BI should connect to
+
+screenshots of query results
+
+Suggested text starter:
+
+# Week 3 Day 4 — Serving Views
+
+## Goal
+Create a BI-ready serving layer in Synapse Serverless SQL using views.
+
+## Objects created
+- dbo.ext_customers_clean (external table over CETAS Parquet folder)
+- dbo.vw_customers (clean dimension view)
+- dbo.vw_customer_signups_by_month (aggregation view)
+- serving schema + serving.* views for BI consumption
+
+## How BI should consume
+Power BI / Fabric should connect to:
+- serving.vw_customers
+- serving.vw_customer_signups_by_month
+
+## Notes
+Views provide stable abstractions so storage paths and file formats can change without breaking dashboards.
+
+Git commit commands
+
+Create/continue branch:
+
+git checkout -b week3-day4-serving-views
+
+
+Add files:
+
+git add src/analytics/synapse/views project/week3-synapse/day4-serving-views.md project/week3-synapse/screenshots
+git commit -m "feat(week3): add serving views and BI-ready layer in Synapse serverless"
+git push --set-upstream origin week3-day4-serving-views
+
+
+Open PR: week3-day4-serving-views → main
